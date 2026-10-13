@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:social/pages/home_page.dart';
 import 'package:social/pages/sign_up.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 

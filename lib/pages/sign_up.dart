@@ -1,6 +1,9 @@
 import 'package:email_validator/email_validator.dart';
 import 'package:flutter/material.dart';
-import 'package:social/widgets/custom_text_field.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../widgets/custom_text_field.dart' show CustomTextFormField;
 
 class SignUpPage extends StatefulWidget {
   const new({super.key});
@@ -15,6 +18,9 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController _passwordController = TextEditingController();
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  bool _passwordObscure = true;
+  bool _isLoading = false;
   @override
   void dispose() {
     super.dispose();
@@ -31,7 +37,7 @@ class _SignUpPageState extends State<SignUpPage> {
         child: Padding(
           padding: .symmetric(horizontal: 16),
           child: Form(
-            autovalidateMode: .onUserInteraction,
+            autovalidateMode: .onUserInteractionIfError,
             key: _formKey,
             child: Column(
               mainAxisAlignment: .center,
@@ -74,6 +80,19 @@ class _SignUpPageState extends State<SignUpPage> {
                 CustomTextFormField(
                   controller: _passwordController,
                   prefixIcon: Icons.lock,
+                  obscureText: _passwordObscure,
+                  suffixIcon: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _passwordObscure = !_passwordObscure;
+                      });
+                    },
+                    icon: Icon(
+                      _passwordObscure
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                    ),
+                  ),
                   validator: (value) {
                     if (value!.length <= 5) {
                       return "Length most be greater or equal to six lettter";
@@ -87,13 +106,41 @@ class _SignUpPageState extends State<SignUpPage> {
                 SizedBox(
                   width: double.maxFinite,
                   child: FilledButton(
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-
-                        
-                      }
-                    },
-                    child: Text("Sign up"),
+                    onPressed: _isLoading
+                        ? () {}
+                        : () async {
+                            if (_formKey.currentState!.validate()) {
+                              setState(() {
+                                _isLoading = true;
+                              });
+                              try {
+                                final client = Supabase.instance.client;
+                                await client.auth.signUp(
+                                  email: _emailController.text,
+                                  password: _passwordController.text,
+                                );
+                                Fluttertoast.showToast(
+                                  msg: "Your account is created successfully",
+                                );
+                              } on AuthException catch (e) {
+                                Fluttertoast.showToast(
+                                  msg: e.message,
+                                  backgroundColor: Colors.red,
+                                );
+                              } finally {
+                                setState(() {
+                                  _isLoading = false;
+                                });
+                              }
+                            }
+                          },
+                    child: _isLoading
+                        ? Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text("Sign up"),
                   ),
                 ),
 
