@@ -1,6 +1,7 @@
 import 'package:email_validator/email_validator.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:social/pages/home_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../widgets/custom_text_field.dart' show CustomTextFormField;
@@ -121,6 +122,12 @@ class _SignUpPageState extends State<SignUpPage> {
                                 );
                                 Fluttertoast.showToast(
                                   msg: "Your account is created successfully",
+                                );
+
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute(
+                                    builder: (context) => HomePage(),
+                                  ),
                                 );
                               } on AuthException catch (e) {
                                 Fluttertoast.showToast(
