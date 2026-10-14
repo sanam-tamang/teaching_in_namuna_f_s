@@ -119,6 +119,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                 await client.auth.signUp(
                                   email: _emailController.text,
                                   password: _passwordController.text,
+                                  data: {"full_name": _fullNameController.text},
                                 );
                                 Fluttertoast.showToast(
                                   msg: "Your account is created successfully",
@@ -158,7 +159,9 @@ class _SignUpPageState extends State<SignUpPage> {
                       TextSpan(text: "Already have an account? "),
                       WidgetSpan(
                         child: GestureDetector(
-                          onTap: () {},
+                          onTap: () {
+                            Navigator.of(context).pop();
+                          },
                           child: Text("Sign in"),
                         ),
                       ),

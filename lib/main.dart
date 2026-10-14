@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:social/pages/home_page.dart';
+import 'package:social/pages/sign_in_page.dart';
 import 'package:social/pages/sign_up.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -22,7 +23,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
       home: Supabase.instance.client.auth.currentSession != null
           ? HomePage()
-          : SignUpPage(),
+          : SignInPage(),
     );
   }
 }
