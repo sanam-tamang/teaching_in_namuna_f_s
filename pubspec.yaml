@@ -37,6 +37,7 @@ dependencies:
   supabase_flutter: ^2.18.3
   email_validator: ^3.0.0
   fluttertoast: ^10.0.2
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:
