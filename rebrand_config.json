@@ -1,0 +1,9 @@
+{
+  "app_name": "Namuna social",
+  "package_name": "com.lunarit.socialapp",
+  "icon_path": "assets/images/logo.png",
+  "splash_config": {
+    "color": "#FFFFFF",
+    "image": "assets/images/logo.png"
+  }
+}

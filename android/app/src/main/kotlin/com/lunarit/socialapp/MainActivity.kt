@@ -1,4 +1,4 @@
-package com.example.social
+package com.lunarit.socialapp
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -22,7 +22,7 @@ class _HomePageState extends State<HomePage> {
   Future<List<Map<String, dynamic>>> _fetchPosts() async {
     final response = await Supabase.instance.client
         .from('posts')
-        .select('*, profiles(*)')
+        .select('*, profiles(*), likes(user_id), comments(id)')
         .order('created_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response);

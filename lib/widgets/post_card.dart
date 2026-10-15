@@ -1,5 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:social/utils/app_utils.dart';
+import 'package:social/widgets/comments_sheet.dart';
+import 'package:social/widgets/likes_sheet.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PostCard extends StatefulWidget {
@@ -11,65 +15,291 @@ class PostCard extends StatefulWidget {
   State<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard> {
+class _PostCardState extends State<PostCard>
+    with TickerProviderStateMixin {
   bool _isLiked = false;
   int _likeCount = 0;
+  int _commentCount = 0;
+  bool _isLiking = false;
+
+  late AnimationController _heartAnimController;
+  late Animation<double> _heartScaleAnimation;
+  late Animation<double> _heartOpacityAnimation;
+  bool _showBurstHeart = false;
+
+  late AnimationController _likeBtnAnimController;
+  late Animation<double> _likeBtnScaleAnimation;
+
+  RealtimeChannel? _postChannel;
 
   @override
   void initState() {
     super.initState();
-    // Simple initial like placeholder simulation
-    _likeCount = (widget.post['id'].hashCode.abs() % 12);
+    _initLikesAndComments();
+    _initAnimations();
+    _setupRealtime();
   }
 
-  String? _resolveStorageUrl(String? path) {
-    if (path == null || path.trim().isEmpty) return null;
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
-    }
+  void _initAnimations() {
+    // Burst heart animation on image double-tap
+    _heartAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+
+    _heartScaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.3)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 60,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.3, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 40,
+      ),
+    ]).animate(_heartAnimController);
+
+    _heartOpacityAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.0),
+        weight: 20,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.0),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 40,
+      ),
+    ]).animate(_heartAnimController);
+
+    _heartAnimController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() {
+          _showBurstHeart = false;
+        });
+      }
+    });
+
+    // Like button bounce animation
+    _likeBtnAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _likeBtnScaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.35)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 50,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.35, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 50,
+      ),
+    ]).animate(_likeBtnAnimController);
+  }
+
+  void _setupRealtime() {
+    final postId = widget.post['id'].toString();
+    _postChannel = Supabase.instance.client
+        .channel('post_realtime_$postId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'likes',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'post_id',
+            value: postId,
+          ),
+          callback: (payload) {
+            _syncLikesCount();
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'comments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'post_id',
+            value: postId,
+          ),
+          callback: (payload) {
+            _syncCommentsCount();
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _syncLikesCount() async {
     try {
-      return Supabase.instance.client.storage
-          .from('social_files')
-          .getPublicUrl(path);
-    } catch (_) {
-      return null;
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      final likes = await Supabase.instance.client
+          .from('likes')
+          .select('user_id')
+          .eq('post_id', widget.post['id']);
+      if (mounted) {
+        final list = List<Map<String, dynamic>>.from(likes);
+        setState(() {
+          _likeCount = list.length;
+          _isLiked = currentUserId != null &&
+              list.any((item) => item['user_id'] == currentUserId);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _syncCommentsCount() async {
+    try {
+      final count = await Supabase.instance.client
+          .from('comments')
+          .count(CountOption.exact)
+          .eq('post_id', widget.post['id']);
+      if (mounted) {
+        setState(() {
+          _commentCount = count;
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post != widget.post) {
+      _initLikesAndComments();
     }
   }
 
-  String _formatTimeAgo(dynamic rawDate) {
-    if (rawDate == null) return '';
-    DateTime? date;
-    if (rawDate is DateTime) {
-      date = rawDate;
-    } else if (rawDate is String) {
-      date = DateTime.tryParse(rawDate);
+  @override
+  void dispose() {
+    _heartAnimController.dispose();
+    _likeBtnAnimController.dispose();
+    if (_postChannel != null) {
+      Supabase.instance.client.removeChannel(_postChannel!);
     }
-    if (date == null) return '';
+    super.dispose();
+  }
 
-    final now = DateTime.now().toUtc();
-    final diff = now.difference(date.toUtc());
-
-    if (diff.inSeconds < 60) {
-      return 'Just now';
-    } else if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}m ago';
-    } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays}d ago';
-    } else if (diff.inDays < 30) {
-      final weeks = (diff.inDays / 7).floor();
-      return '${weeks}w ago';
+  void _initLikesAndComments() {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final likesList = widget.post['likes'] as List?;
+    if (likesList != null) {
+      _likeCount = likesList.length;
+      _isLiked = currentUserId != null &&
+          likesList.any((item) => item['user_id'] == currentUserId);
     } else {
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      _likeCount = 0;
+      _isLiked = false;
+    }
+
+    final commentsList = widget.post['comments'] as List?;
+    _commentCount = commentsList?.length ?? 0;
+  }
+
+  void _triggerBurstHeart() {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _showBurstHeart = true;
+    });
+    _heartAnimController.forward(from: 0.0);
+    if (!_isLiked) {
+      _toggleLike();
     }
   }
 
-  String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts[0].isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+  Future<void> _toggleLike() async {
+    final client = Supabase.instance.client;
+    final currentUserId = client.auth.currentUser?.id;
+    if (currentUserId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please log in to like posts')),
+        );
+      }
+      return;
+    }
+
+    if (_isLiking) return;
+    _isLiking = true;
+
+    final wasLiked = _isLiked;
+    final previousCount = _likeCount;
+
+    // Trigger bounce animation & haptic feedback
+    _likeBtnAnimController.forward(from: 0.0);
+    HapticFeedback.lightImpact();
+
+    // Optimistic UI update
+    setState(() {
+      _isLiked = !_isLiked;
+      _likeCount += _isLiked ? 1 : -1;
+    });
+
+    try {
+      final postId = widget.post['id'];
+      if (_isLiked) {
+        await client.from('likes').insert({
+          'post_id': postId,
+          'user_id': currentUserId,
+        });
+      } else {
+        await client
+            .from('likes')
+            .delete()
+            .match({'post_id': postId, 'user_id': currentUserId});
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLiked = wasLiked;
+          _likeCount = previousCount;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update like: $e')),
+        );
+      }
+    } finally {
+      _isLiking = false;
+    }
+  }
+
+  void _openComments() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CommentsSheet(
+        postId: widget.post['id'].toString(),
+        initialCommentCount: _commentCount,
+        onCommentCountChanged: (newCount) {
+          if (mounted) {
+            setState(() {
+              _commentCount = newCount;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _openLikes() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => LikesSheet(
+        postId: widget.post['id'].toString(),
+        initialLikeCount: _likeCount,
+      ),
+    );
   }
 
   void _showImagePreview(BuildContext context, String imageUrl) {
@@ -123,15 +353,15 @@ class _PostCardState extends State<PostCard> {
         ? fullName
         : 'Anonymous User';
 
-    final profileAvatarUrl = _resolveStorageUrl(
+    final profileAvatarUrl = AppUtils.resolveStorageUrl(
       profile?['image_url'] as String?,
     );
-    final postImageUrl = _resolveStorageUrl(
+    final postImageUrl = AppUtils.resolveStorageUrl(
       widget.post['image_url'] as String?,
     );
     final content = widget.post['content'] as String? ?? '';
     final createdAt = widget.post['created_at'];
-    final timeAgo = _formatTimeAgo(createdAt);
+    final timeAgo = AppUtils.formatTimeAgo(createdAt);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -159,7 +389,7 @@ class _PostCardState extends State<PostCard> {
                       : null,
                   child: profileAvatarUrl == null
                       ? Text(
-                          _getInitials(displayName),
+                          AppUtils.getInitials(displayName),
                           style: TextStyle(
                             color: colorScheme.onPrimaryContainer,
                             fontWeight: FontWeight.bold,
@@ -220,53 +450,77 @@ class _PostCardState extends State<PostCard> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: GestureDetector(
+                onDoubleTap: _triggerBurstHeart,
                 onTap: () => _showImagePreview(context, postImageUrl),
                 child: Container(
                   constraints: const BoxConstraints(maxHeight: 420),
                   width: double.infinity,
                   color: colorScheme.surfaceContainerHighest,
-                  child: Image.network(
-                    postImageUrl,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return SizedBox(
-                        height: 220,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            value: progress.expectedTotalBytes != null
-                                ? progress.cumulativeBytesLoaded /
-                                      (progress.expectedTotalBytes ?? 1)
-                                : null,
-                            strokeWidth: 2.5,
-                          ),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 160,
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.broken_image_outlined,
-                              size: 40,
-                              color: colorScheme.outline,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Unable to load image',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.outline,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Image.network(
+                        postImageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return SizedBox(
+                            height: 220,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                value: progress.expectedTotalBytes != null
+                                    ? progress.cumulativeBytesLoaded /
+                                          (progress.expectedTotalBytes ?? 1)
+                                    : null,
+                                strokeWidth: 2.5,
                               ),
                             ),
-                          ],
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            height: 160,
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.broken_image_outlined,
+                                  size: 40,
+                                  color: colorScheme.outline,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Unable to load image',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      if (_showBurstHeart)
+                        FadeTransition(
+                          opacity: _heartOpacityAnimation,
+                          child: ScaleTransition(
+                            scale: _heartScaleAnimation,
+                            child: const Icon(
+                              Icons.favorite,
+                              size: 96,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 20,
+                                  color: Colors.black45,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      );
-                    },
+                    ],
                   ),
                 ),
               ),
@@ -277,32 +531,45 @@ class _PostCardState extends State<PostCard> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Row(
               children: [
-                // Like Button
-                InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () {
-                    setState(() {
-                      _isLiked = !_isLiked;
-                      _likeCount += _isLiked ? 1 : -1;
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _isLiked ? Icons.favorite : Icons.favorite_border,
-                          size: 20,
-                          color: _isLiked
-                              ? Colors.red
-                              : colorScheme.onSurfaceVariant,
+                // Like Button (Animated Icon + Clickable Count)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: _toggleLike,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 6,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
+                        child: ScaleTransition(
+                          scale: _likeBtnScaleAnimation,
+                          child: Icon(
+                            _isLiked ? Icons.favorite : Icons.favorite_border,
+                            size: 22,
+                            color: _isLiked
+                                ? Colors.red
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        if (_likeCount > 0) {
+                          _openLikes();
+                        } else {
+                          _toggleLike();
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 6,
+                        ),
+                        child: Text(
                           '$_likeCount',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: _isLiked
@@ -311,16 +578,16 @@ class _PostCardState extends State<PostCard> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
                 const SizedBox(width: 12),
 
                 // Comment Button
                 InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () {},
+                  onTap: _openComments,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -336,9 +603,10 @@ class _PostCardState extends State<PostCard> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Reply',
+                          _commentCount > 0 ? '$_commentCount' : 'Reply',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
