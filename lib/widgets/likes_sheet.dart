@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:social/pages/profile_page.dart';
 import 'package:social/utils/app_utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -217,35 +218,52 @@ class _LikesSheetState extends State<LikesSheet> {
         );
         final timeAgo = AppUtils.formatTimeAgo(item['created_at']);
 
+        final likerUserId = item['user_id'] as String?;
+        void openLikerProfile() {
+          if (likerUserId != null) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ProfilePage(userId: likerUserId),
+              ),
+            );
+          }
+        }
+
         return Row(
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: colorScheme.primaryContainer,
-              backgroundImage:
-                  avatarUrl != null ? NetworkImage(avatarUrl) : null,
-              child: avatarUrl == null
-                  ? Text(
-                      AppUtils.getInitials(displayName),
-                      style: TextStyle(
-                        color: colorScheme.onPrimaryContainer,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null,
+            GestureDetector(
+              onTap: openLikerProfile,
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: colorScheme.primaryContainer,
+                backgroundImage:
+                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
+                    ? Text(
+                        AppUtils.getInitials(displayName),
+                        style: TextStyle(
+                          color: colorScheme.onPrimaryContainer,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: openLikerProfile,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
                   if (timeAgo.isNotEmpty)
                     Text(
                       'Liked $timeAgo',
@@ -257,8 +275,9 @@ class _LikesSheetState extends State<LikesSheet> {
                 ],
               ),
             ),
-          ],
-        );
+          ),
+        ],
+      );
       },
     );
   }

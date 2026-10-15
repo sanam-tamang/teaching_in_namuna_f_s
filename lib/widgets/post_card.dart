@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:social/pages/profile_page.dart';
 import 'package:social/utils/app_utils.dart';
 import 'package:social/widgets/comments_sheet.dart';
 import 'package:social/widgets/likes_sheet.dart';
@@ -363,6 +364,19 @@ class _PostCardState extends State<PostCard>
     final createdAt = widget.post['created_at'];
     final timeAgo = AppUtils.formatTimeAgo(createdAt);
 
+    final authorUserId =
+        (widget.post['user_id'] as String?) ?? (profile?['id'] as String?);
+
+    void openAuthorProfile() {
+      if (authorUserId != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(userId: authorUserId),
+          ),
+        );
+      }
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       elevation: 0.5,
@@ -381,44 +395,51 @@ class _PostCardState extends State<PostCard>
             padding: const EdgeInsets.fromLTRB(14, 14, 8, 8),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: colorScheme.primaryContainer,
-                  backgroundImage: profileAvatarUrl != null
-                      ? NetworkImage(profileAvatarUrl)
-                      : null,
-                  child: profileAvatarUrl == null
-                      ? Text(
-                          AppUtils.getInitials(displayName),
-                          style: TextStyle(
-                            color: colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        )
-                      : null,
+                GestureDetector(
+                  onTap: openAuthorProfile,
+                  child: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: colorScheme.primaryContainer,
+                    backgroundImage: profileAvatarUrl != null
+                        ? NetworkImage(profileAvatarUrl)
+                        : null,
+                    child: profileAvatarUrl == null
+                        ? Text(
+                            AppUtils.getInitials(displayName),
+                            style: TextStyle(
+                              color: colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          )
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        displayName,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (timeAgo.isNotEmpty)
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: openAuthorProfile,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          timeAgo,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                          displayName,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                    ],
+                        if (timeAgo.isNotEmpty)
+                          Text(
+                            timeAgo,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 IconButton(

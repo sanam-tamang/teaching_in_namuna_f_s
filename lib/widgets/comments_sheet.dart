@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:social/pages/profile_page.dart';
 import 'package:social/utils/app_utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -463,24 +464,38 @@ class _CommentsSheetState extends State<CommentsSheet> {
         final isOwner = currentUserId != null &&
             comment['user_id'] == currentUserId;
 
+        final commenterUserId = comment['user_id'] as String?;
+        void openCommenterProfile() {
+          if (commenterUserId != null) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ProfilePage(userId: commenterUserId),
+              ),
+            );
+          }
+        }
+
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: colorScheme.primaryContainer,
-              backgroundImage:
-                  avatarUrl != null ? NetworkImage(avatarUrl) : null,
-              child: avatarUrl == null
-                  ? Text(
-                      AppUtils.getInitials(displayName),
-                      style: TextStyle(
-                        color: colorScheme.onPrimaryContainer,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null,
+            GestureDetector(
+              onTap: openCommenterProfile,
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: colorScheme.primaryContainer,
+                backgroundImage:
+                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
+                    ? Text(
+                        AppUtils.getInitials(displayName),
+                        style: TextStyle(
+                          color: colorScheme.onPrimaryContainer,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -489,10 +504,13 @@ class _CommentsSheetState extends State<CommentsSheet> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        displayName,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      GestureDetector(
+                        onTap: openCommenterProfile,
+                        child: Text(
+                          displayName,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       if (timeAgo.isNotEmpty) ...[
